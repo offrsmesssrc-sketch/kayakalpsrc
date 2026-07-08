@@ -1,8 +1,12 @@
-# Python packages for Kaya Kalp cloud server
-# Install with: pip install -r requirements.txt
-
-# Core image / face recognition
-opencv-python-headless>=4.8.0
-face-recognition>=1.3.0
-numpy>=1.24.0
-Pillow>=9.5.0
+# Python packages for Kaya Kalp cloud server (Render.com Free Tier compatible)
+#
+# NOTE: To keep the Free tier deployment fast and successful (no C++ compile hangs/timeouts),
+# all heavy face recognition libraries (dlib, face-recognition, opencv) are optional.
+#
+# If you upgrade to a paid Render plan and wish to enable cloud face recognition, 
+# uncomment the dependencies below:
+#
+# opencv-python-headless>=4.8.0
+# face-recognition>=1.3.0
+# numpy>=1.24.0
+# Pillow>=9.5.0

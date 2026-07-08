@@ -21,9 +21,14 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-import cv2
-import face_recognition
-import numpy as np
+try:
+    import numpy as np
+    import cv2
+    import face_recognition
+    FACE_RECOGNITION_SUPPORTED = True
+except ImportError:
+    FACE_RECOGNITION_SUPPORTED = False
+    np = None
 
 # ═══════════════════════════════════════════════════════════
 #  CONFIGURATION
@@ -229,6 +234,12 @@ def load_known_faces():
                 new_names[row["id"]] = row["name"]
     except Exception as e:
         print("load_known_faces – DB error:", e)
+
+    if not FACE_RECOGNITION_SUPPORTED:
+        with face_lock:
+            known_encodings, known_ids, known_names = new_encodings, new_ids, new_names
+        print("Face recognition is not supported/enabled. Skipped face encoding cache.")
+        return
 
     if not os.path.exists(KNOWN_FACES_DIR):
         with face_lock:
@@ -590,6 +601,12 @@ class BeautyHandler(BaseHTTPRequestHandler):
             self.send_json({"success": ok})
 
         elif path == "/api/recognize":
+            if not FACE_RECOGNITION_SUPPORTED:
+                self.send_json({
+                    "success": False,
+                    "error": "Face recognition is disabled on this server (Render Free Tier constraints). Please use manual check-in or run locally."
+                })
+                return
             p       = self.read_json()
             img_b64 = p.get("image", "")
             if not img_b64:

@@ -25,7 +25,12 @@ services:
         value: abcd@1234  # CHANGE THIS in Render dashboard (use a strong password!)
 
     # Persistent Disk — keeps your database and face photos safe across deploys
-    disk:
-      name: parlour-data
-      mountPath: /data
-      sizeGB: 1           # 1 GB is free on paid plans; use local /data on free tier
+    # NOTE: Persistent disks are NOT supported on Render's Free tier.
+    # To use a persistent disk, uncomment the lines below AND change "plan: free" to a paid plan (e.g., "plan: starter").
+    # If using the Free tier, keep these lines commented out. The server will write to a local container folder (/data),
+    # but database changes/photos will be reset whenever the service spins down or redeploys.
+    #
+    # disk:
+    #   name: parlour-data
+    #   mountPath: /data
+    #   sizeGB: 1
