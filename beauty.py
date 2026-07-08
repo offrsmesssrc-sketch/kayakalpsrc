@@ -54,7 +54,7 @@ COLUMNS = ["ID", "Name"]
 # ----------- Face Recognition Configuration -----------
 TOLERANCE = 0.48
 MODEL = 'hog'
-KNOWN_FACES_DIR = os.path.join(DATA_FOLDER, "faces_adm")
+KNOWN_FACES_DIR = os.path.join(DATA_FOLDER, "faces_kaya")
 ENCODINGS_CACHE_FILE = os.path.join(DATA_FOLDER, "face_encodings_cache.json")
 
 known_encodings = []
