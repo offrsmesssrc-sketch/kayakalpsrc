@@ -1885,6 +1885,10 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
             .replace(/'/g, "&#039;");
     }
 
+    function getCategoryId(cat) {
+        return 'cat-' + String(cat).replace(/[^a-zA-Z0-9]/g, '-');
+    }
+
     // ── Tabs ─────────────────────────────────────────────────
     function switchTab(name, btn) {
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -1895,24 +1899,29 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
 
     // ── Data Load ────────────────────────────────────────────
     async function loadData() {
-        const res  = await fetch('/admin/get_data', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-        allData    = await res.json();
-        if (!allData.success) { showToast('Failed to load data: ' + allData.error, 'error'); return; }
+        try {
+            const res  = await fetch('/admin/get_data', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+            allData    = await res.json();
+            if (!allData.success) { showToast('Failed to load data: ' + allData.error, 'error'); return; }
 
-        // Stats row
-        document.getElementById('statBeauticians').innerText = allData.beauticians.length;
-        document.getElementById('statToday').innerText = 'Rs. ' + allData.overall.total_today;
-        document.getElementById('statServices').innerText = allData.services.length;
-        document.getElementById('statAttendance').innerText = allData.attendance.length;
+            // Stats row
+            document.getElementById('statBeauticians').innerText = allData.beauticians.length;
+            document.getElementById('statToday').innerText = 'Rs. ' + allData.overall.total_today;
+            document.getElementById('statServices').innerText = allData.services.length;
+            document.getElementById('statAttendance').innerText = allData.attendance.length;
 
-        renderBeauticians(allData.beauticians);
-        renderAttendance(allData.attendance);
-        renderServices(allData.services);
-        renderEarnings(allData.overall, allData.beauticians);
-        populatePhotoSelect(allData.beauticians);
-        
-        localRateList = allData.rate_list || {};
-        renderRateListEditor(localRateList);
+            renderBeauticians(allData.beauticians);
+            renderAttendance(allData.attendance);
+            renderServices(allData.services);
+            renderEarnings(allData.overall, allData.beauticians);
+            populatePhotoSelect(allData.beauticians);
+            
+            localRateList = allData.rate_list || {};
+            renderRateListEditor(localRateList);
+        } catch (err) {
+            console.error('JS Error in loadData:', err);
+            showToast('JS Error in loadData: ' + err.message, 'error');
+        }
     }
 
     // ── Beauticians ──────────────────────────────────────────
@@ -2090,7 +2099,7 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
                             <th style="width:15%;">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="category-services-${escapeHtml(category)}">
+                    <tbody id="${getCategoryId(category)}">
             `;
             
             if (!services.length) {
@@ -2131,7 +2140,7 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
         const categories = Object.keys(localRateList);
         categories.forEach(cat => {
             updated[cat] = [];
-            const tbody = document.getElementById(`category-services-${cat}`);
+            const tbody = document.getElementById(getCategoryId(cat));
             if (tbody) {
                 const rows = tbody.querySelectorAll('tr[data-category]');
                 rows.forEach(row => {
