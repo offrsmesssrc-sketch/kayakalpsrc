@@ -1,0 +1,46 @@
+# ── Python cache ──────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── Virtual environments ──────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Local data (never push to GitHub) ────────────────────────
+# These are generated locally and should NOT be in source control
+*.xlsx
+*.db
+*.sqlite
+*.sqlite3
+D:/beautyparlour/
+beautyparlour/
+faces_adm/
+face_encodings_cache.json
+server.crt
+server.key
+server_qr.png
+web_credentials.json
+
+# ── Build output ──────────────────────────────────────────────
+build/
+dist/
+*.spec
+
+# ── OS files ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / editor ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log

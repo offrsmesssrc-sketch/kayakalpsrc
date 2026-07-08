@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────
+#  Kaya Kalp Beauty Parlour — render.yaml
+#  Auto-deployment configuration for Render.com
+#
+#  HOW TO USE:
+#  1. Push your code to a GitHub repository
+#  2. Go to render.com → New → Blueprint
+#  3. Connect your GitHub repo — Render will read this file automatically
+# ─────────────────────────────────────────────────────────────
+
+services:
+  - type: web
+    name: kaya-kalp-parlour
+    runtime: docker
+    plan: free           # Change to "starter" ($7/mo) for always-on service
+                         # Free tier spins down after 15 min of inactivity
+
+    # Environment variables — override these in Render dashboard for security
+    envVars:
+      - key: DATA_FOLDER
+        value: /data
+      - key: ADMIN_USERNAME
+        value: admin      # CHANGE THIS in Render dashboard
+      - key: ADMIN_PASSWORD
+        value: abcd@1234  # CHANGE THIS in Render dashboard (use a strong password!)
+
+    # Persistent Disk — keeps your database and face photos safe across deploys
+    disk:
+      name: parlour-data
+      mountPath: /data
+      sizeGB: 1           # 1 GB is free on paid plans; use local /data on free tier
