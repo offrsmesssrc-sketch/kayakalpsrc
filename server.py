@@ -41,8 +41,8 @@ KNOWN_FACES_DIR      = os.path.join(DATA_FOLDER, "faces_adm")
 ENCODINGS_CACHE_FILE = os.path.join(DATA_FOLDER, "face_encodings_cache.json")
 os.makedirs(KNOWN_FACES_DIR, exist_ok=True)
 
-ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abcd@1234")
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin").strip().strip('"').strip("'")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "abcd@1234").strip().strip('"').strip("'")
 
 TOLERANCE        = 0.48
 MODEL            = "hog"
@@ -648,7 +648,10 @@ class BeautyHandler(BaseHTTPRequestHandler):
         # ── Admin login ──
         elif path == "/admin/login":
             p = self.read_json()
-            if p.get("username") == ADMIN_USERNAME and p.get("password") == ADMIN_PASSWORD:
+            attempted_user = (p.get("username") or "").strip()
+            attempted_pass = p.get("password") or ""
+            print(f"[AUTH] Login attempt for username: '{attempted_user}'")
+            if attempted_user == ADMIN_USERNAME and attempted_pass == ADMIN_PASSWORD:
                 token = create_session()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
