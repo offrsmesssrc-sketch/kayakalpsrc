@@ -2228,7 +2228,7 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
     }
 
     async function resetDatabase() {
-        const confirmText = prompt("WARNING: This will delete everything in the database.\nTo confirm, please type 'RESET DATABASE' below:");
+        const confirmText = prompt(`WARNING: This will delete everything in the database.\nTo confirm, please type 'RESET DATABASE' below:`);
         if (confirmText !== 'RESET DATABASE') {
             showToast('Database reset cancelled or invalid confirmation text.', 'error');
             return;
