@@ -181,6 +181,26 @@ RATE_LIST = {
     ]
 }
 
+RATES_FILE = os.path.join(DATA_FOLDER, "rates.json")
+
+def load_rates():
+    global RATE_LIST
+    if os.path.exists(RATES_FILE):
+        try:
+            with open(RATES_FILE, "r", encoding="utf-8") as f:
+                RATE_LIST = json.load(f)
+        except Exception as e:
+            print("Error loading rates.json:", e)
+
+def save_rates():
+    try:
+        with open(RATES_FILE, "w", encoding="utf-8") as f:
+            json.dump(RATE_LIST, f, indent=4)
+    except Exception as e:
+        print("Error saving rates.json:", e)
+
+load_rates()
+
 # ═══════════════════════════════════════════════════════════
 #  DATABASE  (SQLite replaces all Excel files)
 # ═══════════════════════════════════════════════════════════
@@ -551,7 +571,7 @@ class BeautyHandler(BaseHTTPRequestHandler):
 
     # ── POST ─────────────────────────────────────────────
     def do_POST(self):
-        global ADMIN_USERNAME, ADMIN_PASSWORD
+        global ADMIN_USERNAME, ADMIN_PASSWORD, known_encodings, known_ids, known_names
         path = urlparse(self.path).path
 
         # ── Public beautician APIs ──
@@ -681,7 +701,8 @@ class BeautyHandler(BaseHTTPRequestHandler):
                     b["stats"] = compute_beautician_stats(b["id"])
                 self.send_json({"success": True, "beauticians": beauticians,
                                 "attendance": attendance, "services": services,
-                                "overall": compute_overall_stats()})
+                                "overall": compute_overall_stats(),
+                                "rate_list": RATE_LIST})
             except Exception as e:
                 self.send_json({"success": False, "error": str(e)})
 
@@ -712,6 +733,8 @@ class BeautyHandler(BaseHTTPRequestHandler):
             try:
                 with get_db() as conn:
                     conn.execute("DELETE FROM beauticians WHERE id=?", (b_id,))
+                    conn.execute("DELETE FROM attendance WHERE beautician_id=?", (b_id,))
+                    conn.execute("DELETE FROM services_log WHERE beautician_id=?", (b_id,))
                     conn.commit()
                 for ext in (".jpg", ".jpeg", ".png"):
                     p2 = os.path.join(KNOWN_FACES_DIR, f"{b_id}{ext}")
@@ -725,6 +748,68 @@ class BeautyHandler(BaseHTTPRequestHandler):
                         with open(ENCODINGS_CACHE_FILE, "w") as f: json.dump(cache, f)
                     except Exception: pass
                 threading.Thread(target=load_known_faces, daemon=True).start()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)})
+
+        # ── Admin: update rate list ──
+        elif path == "/admin/update_rate_list":
+            if not self.require_admin(): return
+            p = self.read_json()
+            new_rates = p.get("rate_list")
+            if not isinstance(new_rates, dict):
+                self.send_json({"success": False, "error": "Invalid rate list format"}); return
+            validated = {}
+            for cat, items in new_rates.items():
+                if not isinstance(items, list):
+                    continue
+                v_items = []
+                for item in items:
+                    if isinstance(item, dict) and "name" in item and "rate" in item:
+                        n = str(item["name"]).strip()
+                        r = item["rate"]
+                        if isinstance(r, (int, float)):
+                            pass
+                        elif str(r).strip().lower() == "ask":
+                            r = "Ask"
+                        else:
+                            try:
+                                r = float(r)
+                            except ValueError:
+                                r = "Ask"
+                        if n:
+                            v_items.append({"name": n, "rate": r})
+                validated[cat] = v_items
+            
+            RATE_LIST.clear()
+            RATE_LIST.update(validated)
+            save_rates()
+            self.send_json({"success": True})
+
+        # ── Admin: reset database ──
+        elif path == "/admin/reset_db":
+            if not self.require_admin(): return
+            try:
+                with get_db() as conn:
+                    conn.execute("DROP TABLE IF EXISTS beauticians")
+                    conn.execute("DROP TABLE IF EXISTS attendance")
+                    conn.execute("DROP TABLE IF EXISTS services_log")
+                    conn.commit()
+                init_db()
+                with face_lock:
+                    known_encodings = []
+                    known_ids = []
+                    known_names = {}
+                if os.path.exists(KNOWN_FACES_DIR):
+                    for filename in os.listdir(KNOWN_FACES_DIR):
+                        p = os.path.join(KNOWN_FACES_DIR, filename)
+                        if os.path.isfile(p):
+                            try: os.remove(p)
+                            except Exception: pass
+                if os.path.exists(ENCODINGS_CACHE_FILE):
+                    try: os.remove(ENCODINGS_CACHE_FILE)
+                    except Exception: pass
+                load_known_faces()
                 self.send_json({"success": True})
             except Exception as e:
                 self.send_json({"success": False, "error": str(e)})
@@ -1624,6 +1709,7 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
         <button class="tab-btn" onclick="switchTab('attendance', this)">&#128336; Attendance</button>
         <button class="tab-btn" onclick="switchTab('services', this)">&#10024; Services</button>
         <button class="tab-btn" onclick="switchTab('earnings', this)">&#128176; Earnings</button>
+        <button class="tab-btn" onclick="switchTab('rates', this)">📋 Rate List</button>
         <button class="tab-btn" onclick="switchTab('settings', this)">&#9881; Settings</button>
     </div>
 
@@ -1717,6 +1803,31 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Tab: Rate List -->
+    <div class="tab-panel" id="tab-rates">
+        <div class="card">
+            <div class="card-title">📋 Manage Rate List</div>
+            <p style="font-size:13px;color:var(--sub);margin-bottom:20px;">
+                View and amend the rate list categories, services, and prices. Click "Save Rate List Changes" to apply.
+            </p>
+            <div class="form-row" style="margin-bottom:20px; align-items:flex-end;">
+                <div class="form-group" style="max-width:300px;">
+                    <label>New Category Name</label>
+                    <input type="text" id="new-category-name" placeholder="e.g. Nail Art">
+                </div>
+                <button class="btn-sm btn-success" onclick="addCategory()" style="height:42px;align-self:flex-end;">+ Add Category</button>
+            </div>
+            
+            <div id="rate-list-editor">
+                <!-- Dynamically filled by javascript -->
+            </div>
+            
+            <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:20px;display:flex;justify-content:flex-end;">
+                <button class="btn-sm btn-primary" onclick="saveRateList()" style="font-size:15px;padding:12px 28px;">Save Rate List Changes</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Tab: Settings -->
     <div class="tab-panel" id="tab-settings">
         <div class="card">
@@ -1741,6 +1852,13 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
                 <button class="btn-sm btn-primary">&#8659; Download beautyparlour.db</button>
             </a>
         </div>
+        <div class="card" style="border-color:rgba(224,112,112,0.3); background:rgba(224,112,112,0.05);">
+            <div class="card-title" style="color:var(--red);">&#9888; Reset / Erase Entire Database</div>
+            <p style="font-size:13px;color:var(--sub);margin-bottom:16px;">
+                WARNING: This will permanently delete all registered beauticians, attendance logs, and service records. This action cannot be undone.
+            </p>
+            <button class="btn-sm btn-danger" onclick="resetDatabase()">&#128465; Reset Database</button>
+        </div>
     </div>
 </div>
 
@@ -1748,6 +1866,17 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
 
 <script>
     let allData = null;
+    let localRateList = {};
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
 
     // ── Tabs ─────────────────────────────────────────────────
     function switchTab(name, btn) {
@@ -1774,6 +1903,9 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
         renderServices(allData.services);
         renderEarnings(allData.overall, allData.beauticians);
         populatePhotoSelect(allData.beauticians);
+        
+        localRateList = allData.rate_list || {};
+        renderRateListEditor(localRateList);
     }
 
     // ── Beauticians ──────────────────────────────────────────
@@ -1817,7 +1949,7 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
     }
 
     async function deleteBeautician(id, name) {
-        if (!confirm(`Are you sure you want to delete "${name}" (ID: ${id})?\nThis cannot be undone.`)) return;
+        if (!confirm(`Are you sure you want to delete "${name}" (ID: ${id})?\nThis will also delete their attendance logs and service records. This cannot be undone.`)) return;
         const res  = await fetch('/admin/delete_beautician', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})});
         const data = await res.json();
         if (data.success) {
@@ -1919,6 +2051,190 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
                 `).join('')}</tbody>
             </table></div>
         ` : '<div class="empty">No beauticians registered.</div>';
+    }
+
+    // ── Rate List Editor ─────────────────────────────────────
+    function renderRateListEditor(rateList) {
+        const container = document.getElementById('rate-list-editor');
+        container.innerHTML = '';
+        const entries = Object.entries(rateList);
+        if (!entries.length) {
+            container.innerHTML = '<div class="empty">Rate list is empty. Add a category above.</div>';
+            return;
+        }
+        for (const [category, services] of entries) {
+            const catDiv = document.createElement('div');
+            catDiv.className = 'card';
+            catDiv.style.background = 'rgba(0,0,0,0.2)';
+            catDiv.style.marginBottom = '20px';
+            catDiv.style.border = '1px solid rgba(229,169,180,0.1)';
+            
+            let html = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                    <h3 style="color:#fff; font-size:16px; font-weight:700;">${escapeHtml(category)}</h3>
+                    <button class="btn-sm btn-danger" style="padding:6px 12px;" onclick="deleteCategory('${escapeHtml(category)}')">Delete Category</button>
+                </div>
+                <div class="table-wrap">
+                <table style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th style="width:60%;">Service Name</th>
+                            <th style="width:25%;">Rate (or 'Ask')</th>
+                            <th style="width:15%;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="category-services-${escapeHtml(category)}">
+            `;
+            
+            if (!services.length) {
+                html += `<tr><td colspan="3" style="text-align:center;color:var(--sub);padding:16px;">No services in this category. Click "+ Add Service" below.</td></tr>`;
+            } else {
+                services.forEach((s, idx) => {
+                    html += `
+                        <tr data-category="${escapeHtml(category)}" data-index="${idx}">
+                            <td>
+                                <input type="text" class="service-name-input" value="${escapeHtml(s.name)}" style="width:100%; padding:8px 12px; background:rgba(0,0,0,0.3); border:1px solid var(--border); color:#fff; border-radius:8px; outline:none; font-family:inherit;">
+                            </td>
+                            <td>
+                                <input type="text" class="service-rate-input" value="${s.rate}" style="width:100%; padding:8px 12px; background:rgba(0,0,0,0.3); border:1px solid var(--border); color:#fff; border-radius:8px; outline:none; font-family:inherit;">
+                            </td>
+                            <td>
+                                <button class="btn-sm btn-danger" style="padding:6px 12px; font-size:11px;" onclick="deleteService('${escapeHtml(category)}', ${idx})">Remove</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+            
+            html += `
+                    </tbody>
+                </table>
+                </div>
+                <div style="margin-top:12px;">
+                    <button class="btn-sm btn-ghost" style="padding:6px 12px;" onclick="addServiceRow('${escapeHtml(category)}')">+ Add Service</button>
+                </div>
+            `;
+            catDiv.innerHTML = html;
+            container.appendChild(catDiv);
+        }
+    }
+
+    function syncLocalRateListFromUI() {
+        const updated = {};
+        const categories = Object.keys(localRateList);
+        categories.forEach(cat => {
+            updated[cat] = [];
+            const tbody = document.getElementById(`category-services-${cat}`);
+            if (tbody) {
+                const rows = tbody.querySelectorAll('tr[data-category]');
+                rows.forEach(row => {
+                    const nameInput = row.querySelector('.service-name-input');
+                    const rateInput = row.querySelector('.service-rate-input');
+                    if (nameInput && rateInput) {
+                        const name = nameInput.value.trim();
+                        let rateVal = rateInput.value.trim();
+                        if (rateVal.toLowerCase() === 'ask') {
+                            rateVal = 'Ask';
+                        } else {
+                            const parsed = parseFloat(rateVal);
+                            if (!isNaN(parsed)) {
+                                rateVal = parsed;
+                            }
+                        }
+                        if (name) {
+                            updated[cat].push({name, rate: rateVal});
+                        }
+                    }
+                });
+            }
+        });
+        localRateList = updated;
+    }
+
+    function addCategory() {
+        const input = document.getElementById('new-category-name');
+        const catName = input.value.trim();
+        if (!catName) {
+            showToast('Category name cannot be empty', 'error');
+            return;
+        }
+        if (localRateList[catName]) {
+            showToast('Category already exists', 'error');
+            return;
+        }
+        syncLocalRateListFromUI();
+        localRateList[catName] = [];
+        input.value = '';
+        renderRateListEditor(localRateList);
+        showToast(`Category "${catName}" added.`, 'success');
+    }
+
+    function deleteCategory(catName) {
+        if (!confirm(`Are you sure you want to delete category "${catName}"? All its services will be removed.`)) return;
+        syncLocalRateListFromUI();
+        delete localRateList[catName];
+        renderRateListEditor(localRateList);
+    }
+
+    function addServiceRow(catName) {
+        syncLocalRateListFromUI();
+        if (!localRateList[catName]) localRateList[catName] = [];
+        localRateList[catName].push({name: 'New Service', rate: 0});
+        renderRateListEditor(localRateList);
+    }
+
+    function deleteService(catName, idx) {
+        syncLocalRateListFromUI();
+        if (localRateList[catName]) {
+            localRateList[catName].splice(idx, 1);
+            renderRateListEditor(localRateList);
+        }
+    }
+
+    async function saveRateList() {
+        syncLocalRateListFromUI();
+        try {
+            const res = await fetch('/admin/update_rate_list', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({rate_list: localRateList})
+            });
+            const result = await res.json();
+            if (result.success) {
+                showToast('Rate list updated successfully!', 'success');
+                loadData();
+            } else {
+                showToast('Failed to update rate list: ' + result.error, 'error');
+            }
+        } catch(e) {
+            showToast('Error saving rate list: ' + e, 'error');
+        }
+    }
+
+    async function resetDatabase() {
+        const confirmText = prompt("WARNING: This will delete everything in the database.\nTo confirm, please type 'RESET DATABASE' below:");
+        if (confirmText !== 'RESET DATABASE') {
+            showToast('Database reset cancelled or invalid confirmation text.', 'error');
+            return;
+        }
+        if (!confirm('FINAL WARNING: Are you absolutely sure? This will delete all beauticians, logs, attendance, and photos.')) return;
+        
+        try {
+            const res = await fetch('/admin/reset_db', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            const result = await res.json();
+            if (result.success) {
+                showToast('Database reset successfully. Reloading...', 'success');
+                setTimeout(() => { window.location.reload(); }, 1500);
+            } else {
+                showToast('Failed to reset database: ' + result.error, 'error');
+            }
+        } catch (e) {
+            showToast('Error resetting database: ' + e, 'error');
+        }
     }
 
     // ── Table filter ─────────────────────────────────────────

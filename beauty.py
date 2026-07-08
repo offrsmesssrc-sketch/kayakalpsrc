@@ -280,6 +280,26 @@ RATE_LIST = {
     ]
 }
 
+RATES_FILE = os.path.join(DATA_FOLDER, "rates.json")
+
+def load_rates():
+    global RATE_LIST
+    if os.path.exists(RATES_FILE):
+        try:
+            with open(RATES_FILE, "r", encoding="utf-8") as f:
+                RATE_LIST = json.load(f)
+        except Exception as e:
+            print("Error loading rates.json:", e)
+
+def save_rates():
+    try:
+        with open(RATES_FILE, "w", encoding="utf-8") as f:
+            json.dump(RATE_LIST, f, indent=4)
+    except Exception as e:
+        print("Error saving rates.json:", e)
+
+load_rates()
+
 # ----------- Excel Helpers -----------
 def ensure_workbook():
     if not os.path.exists(DATA_FOLDER):
@@ -2068,6 +2088,217 @@ class FaceRecognitionWindow(tk.Toplevel):
         self.destroy()
 
 
+class RateListWindow(tk.Toplevel):
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("Manage Rate List")
+        self.geometry("800x600")
+        self.configure(bg="#fdf4f5")
+        self.transient(master)
+        self.grab_set()
+
+        # Local copy of rate list
+        self.local_rates = json.loads(json.dumps(RATE_LIST))
+
+        # Main horizontal layout pane
+        main_pane = tk.PanedWindow(self, orient=tk.HORIZONTAL, bg="#fdf4f5", bd=0)
+        main_pane.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # --- Left Pane (Categories) ---
+        left_frame = ttk.LabelFrame(main_pane, text="Categories")
+        main_pane.add(left_frame, minsize=220)
+
+        self.cat_listbox = tk.Listbox(left_frame, font=("Outfit", 10), bg="white", selectbackground="#e5a9b4", selectforeground="black")
+        self.cat_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.cat_listbox.bind("<<ListboxSelect>>", self.on_category_select)
+
+        cat_btn_frame = ttk.Frame(left_frame)
+        cat_btn_frame.pack(fill=tk.X, padx=5, pady=5)
+        tk.Button(cat_btn_frame, text="Add Category", command=self.add_category, bg="#d48a97", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(cat_btn_frame, text="Delete Category", command=self.delete_category, bg="#F08080", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        # --- Right Pane (Services) ---
+        right_frame = ttk.LabelFrame(main_pane, text="Services & Rates")
+        main_pane.add(right_frame, minsize=450)
+
+        table_frame = ttk.Frame(right_frame)
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.serv_table = ttk.Treeview(table_frame, columns=["Name", "Rate"], show="headings")
+        self.serv_table.heading("Name", text="Service Name")
+        self.serv_table.heading("Rate", text="Rate (or 'Ask')")
+        self.serv_table.column("Name", width=300)
+        self.serv_table.column("Rate", width=120)
+        self.serv_table.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.serv_table.yview)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.serv_table.configure(yscrollcommand=vsb.set)
+        self.serv_table.bind("<Double-1>", self.edit_service)
+
+        serv_btn_frame = ttk.Frame(right_frame)
+        serv_btn_frame.pack(fill=tk.X, padx=5, pady=5)
+        tk.Button(serv_btn_frame, text="Add Service", command=self.add_service, bg="#d48a97", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(serv_btn_frame, text="Edit Selected", command=self.edit_service, bg="#d48a97", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        tk.Button(serv_btn_frame, text="Delete Service", command=self.delete_service, bg="#F08080", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+
+        # --- Bottom Panel (Save & Close) ---
+        bottom_frame = ttk.Frame(self)
+        bottom_frame.pack(fill=tk.X, padx=10, pady=10)
+        tk.Button(bottom_frame, text="Save Rate List Changes", command=self.save_changes, bg="#d48a97", fg="white", font=("Outfit", 10, "bold")).pack(side=tk.RIGHT, padx=5)
+        tk.Button(bottom_frame, text="Cancel", command=self.destroy, bg="#ccc", fg="black", font=("Outfit", 10)).pack(side=tk.RIGHT, padx=5)
+
+        self.populate_categories()
+
+    def populate_categories(self):
+        self.cat_listbox.delete(0, tk.END)
+        for cat in sorted(self.local_rates.keys()):
+            self.cat_listbox.insert(tk.END, cat)
+        if self.cat_listbox.size() > 0:
+            self.cat_listbox.selection_set(0)
+            self.on_category_select()
+
+    def on_category_select(self, event=None):
+        selected = self.cat_listbox.curselection()
+        # Clear services treeview
+        self.serv_table.delete(*self.serv_table.get_children())
+        if not selected:
+            return
+        cat = self.cat_listbox.get(selected[0])
+        services = self.local_rates.get(cat, [])
+        for idx, s in enumerate(services):
+            self.serv_table.insert("", tk.END, iid=str(idx), values=[s["name"], s["rate"]])
+
+    def add_category(self):
+        from tkinter import simpledialog
+        cat = simpledialog.askstring("Add Category", "Enter new category name:")
+        if not cat:
+            return
+        cat = cat.strip()
+        if cat in self.local_rates:
+            messagebox.showerror("Error", "Category already exists.")
+            return
+        self.local_rates[cat] = []
+        self.populate_categories()
+        # Find index of the newly added category and select it
+        for idx in range(self.cat_listbox.size()):
+            if self.cat_listbox.get(idx) == cat:
+                self.cat_listbox.selection_clear(0, tk.END)
+                self.cat_listbox.selection_set(idx)
+                self.on_category_select()
+                break
+
+    def delete_category(self):
+        selected = self.cat_listbox.curselection()
+        if not selected:
+            messagebox.showwarning("Warning", "Please select a category to delete.")
+            return
+        cat = self.cat_listbox.get(selected[0])
+        if not messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete category '{cat}'? All services in it will be lost."):
+            return
+        del self.local_rates[cat]
+        self.populate_categories()
+
+    def add_service(self):
+        from tkinter import simpledialog
+        selected = self.cat_listbox.curselection()
+        if not selected:
+            messagebox.showwarning("Warning", "Select a category first.")
+            return
+        cat = self.cat_listbox.get(selected[0])
+        
+        name = simpledialog.askstring("Add Service", "Enter service name:")
+        if not name:
+            return
+        name = name.strip()
+        
+        rate_str = simpledialog.askstring("Add Service", "Enter service rate (or 'Ask'):")
+        if rate_str is None:
+            return
+        rate_str = rate_str.strip()
+        
+        if rate_str.lower() == "ask":
+            rate = "Ask"
+        else:
+            try:
+                rate = int(rate_str)
+            except ValueError:
+                try:
+                    rate = float(rate_str)
+                except ValueError:
+                    rate = "Ask"
+                    
+        self.local_rates[cat].append({"name": name, "rate": rate})
+        self.on_category_select()
+
+    def edit_service(self, event=None):
+        from tkinter import simpledialog
+        selected_cat = self.cat_listbox.curselection()
+        if not selected_cat:
+            return
+        cat = self.cat_listbox.get(selected_cat[0])
+        
+        selected_serv = self.serv_table.selection()
+        if not selected_serv:
+            if event is None:
+                messagebox.showwarning("Warning", "Select a service to edit.")
+            return
+            
+        idx = int(selected_serv[0])
+        current_service = self.local_rates[cat][idx]
+        
+        name = simpledialog.askstring("Edit Service", "Service name:", initialvalue=current_service["name"])
+        if not name:
+            return
+        name = name.strip()
+        
+        rate_str = simpledialog.askstring("Edit Service", "Rate (or 'Ask'):", initialvalue=str(current_service["rate"]))
+        if rate_str is None:
+            return
+        rate_str = rate_str.strip()
+        
+        if rate_str.lower() == "ask":
+            rate = "Ask"
+        else:
+            try:
+                rate = int(rate_str)
+            except ValueError:
+                try:
+                    rate = float(rate_str)
+                except ValueError:
+                    rate = "Ask"
+                    
+        self.local_rates[cat][idx] = {"name": name, "rate": rate}
+        self.on_category_select()
+
+    def delete_service(self):
+        selected_cat = self.cat_listbox.curselection()
+        if not selected_cat:
+            return
+        cat = self.cat_listbox.get(selected_cat[0])
+        
+        selected_serv = self.serv_table.selection()
+        if not selected_serv:
+            messagebox.showwarning("Warning", "Select a service to delete.")
+            return
+            
+        idx = int(selected_serv[0])
+        service_name = self.local_rates[cat][idx]["name"]
+        if not messagebox.askyesno("Confirm Delete", f"Delete service '{service_name}'?"):
+            return
+            
+        self.local_rates[cat].pop(idx)
+        self.on_category_select()
+
+    def save_changes(self):
+        global RATE_LIST
+        RATE_LIST.clear()
+        RATE_LIST.update(self.local_rates)
+        save_rates()
+        messagebox.showinfo("Success", "Rate list changes saved successfully!")
+        self.destroy()
+
+
 class AttendanceWindow(tk.Toplevel):
     def __init__(self, master):
         super().__init__(master)
@@ -2237,7 +2468,9 @@ class App(tk.Tk):
         tk.Button(btn_frame, text="Face Recognition", command=self.open_face_recognition, bg="#90EE90", fg="black", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Delete Beautician", command=self.delete_data, bg="#d48a97", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Attendance Logs", command=self.open_attendance_window, bg="#d48a97", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Manage Rate List", command=self.open_rate_list_editor, bg="#d48a97", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="View QR Code", command=self.show_server_qr, bg="#e5a9b4", fg="black", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="Reset Database", command=self.reset_database, bg="#F08080", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Exit", command=self.exit_app, bg="#F08080", fg="white", font=("Outfit", 9, "bold")).pack(side=tk.RIGHT, padx=5)
         
         web_info_frame = ttk.Frame(self)
@@ -2568,6 +2801,38 @@ class App(tk.Tk):
                 ws.delete_rows(r, 1)
                 wb.save(FILE_NAME)
                 
+                # Delete attendance records
+                if os.path.exists(ATTENDANCE_FILE):
+                    try:
+                        awb = load_workbook(ATTENDANCE_FILE)
+                        aws = awb.active
+                        for ar in range(aws.max_row, 1, -1):
+                            if str(aws.cell(row=ar, column=3).value or "").strip() == b_id:
+                                aws.delete_rows(ar, 1)
+                        # Re-index the S.no column (column 1)
+                        for ar in range(2, aws.max_row + 1):
+                            aws.cell(row=ar, column=1, value=ar-1)
+                        awb.save(ATTENDANCE_FILE)
+                        awb.close()
+                    except Exception as ae:
+                        print("Error deleting attendance records:", ae)
+
+                # Delete service transactions log records
+                if os.path.exists(SERVICES_LOG_FILE):
+                    try:
+                        swb = load_workbook(SERVICES_LOG_FILE)
+                        sws = swb.active
+                        for sr in range(sws.max_row, 1, -1):
+                            if str(sws.cell(row=sr, column=4).value or "").strip() == b_id:
+                                sws.delete_rows(sr, 1)
+                        # Re-index the S.no column (column 1)
+                        for sr in range(2, sws.max_row + 1):
+                            sws.cell(row=sr, column=1, value=sr-1)
+                        swb.save(SERVICES_LOG_FILE)
+                        swb.close()
+                    except Exception as se:
+                        print("Error deleting services log records:", se)
+
                 for e in [".jpg", ".jpeg", ".png"]:
                     p = os.path.join(KNOWN_FACES_DIR, f"{b_id}{e}")
                     if os.path.exists(p):
@@ -2576,7 +2841,7 @@ class App(tk.Tk):
                         except:
                             pass
                 
-                messagebox.showinfo("Success", f"Beautician ID: {b_id} deleted successfully.")
+                messagebox.showinfo("Success", f"Beautician ID: {b_id} deleted successfully (including all attendance and service records).")
                 self.inputs["ID"].delete(0, tk.END)
                 self.inputs["Name"].delete(0, tk.END)
                 self.load_preview()
@@ -2594,8 +2859,78 @@ class App(tk.Tk):
     def open_face_recognition(self):
         FaceRecognitionWindow(self)
 
+    def open_rate_list_editor(self):
+        RateListWindow(self)
+
     def exit_app(self):
         self.destroy()
+
+    def reset_database(self):
+        confirm1 = messagebox.askyesno(
+            "Confirm Reset", 
+            "WARNING: This will permanently delete all registered beauticians, attendance logs, and service records.\n\nAre you sure you want to reset the database?"
+        )
+        if not confirm1:
+            return
+            
+        confirm2 = messagebox.askyesno(
+            "Final Warning",
+            "This action CANNOT be undone. Are you absolutely sure you want to proceed and erase everything?"
+        )
+        if not confirm2:
+            return
+            
+        try:
+            # Re-create empty workbooks
+            # 1. pers_data.xlsx
+            wb = Workbook()
+            ws = wb.active
+            ws.title = SHEET_NAME
+            for i, h in enumerate(COLUMNS, start=1):
+                ws.cell(row=1, column=i, value=h)
+            wb.save(FILE_NAME)
+            wb.close()
+            
+            # 2. attendance.xlsx
+            wb_att = Workbook()
+            ws_att = wb_att.active
+            headers_att = ["S.no", "Date", "Beautician ID", "Name", "Check-in Time", "Check-out Time"]
+            for i, h in enumerate(headers_att, start=1):
+                ws_att.cell(row=1, column=i, value=h)
+            wb_att.save(ATTENDANCE_FILE)
+            wb_att.close()
+            
+            # 3. services_log.xlsx
+            wb_serv = Workbook()
+            ws_serv = wb_serv.active
+            headers_serv = ["S.no", "Date", "Time", "Beautician ID", "Beautician Name", "Category", "Service Name", "Rate"]
+            for i, h in enumerate(headers_serv, start=1):
+                ws_serv.cell(row=1, column=i, value=h)
+            wb_serv.save(SERVICES_LOG_FILE)
+            wb_serv.close()
+            
+            # 4. Delete photos in faces_kaya
+            if os.path.exists(KNOWN_FACES_DIR):
+                for filename in os.listdir(KNOWN_FACES_DIR):
+                    p = os.path.join(KNOWN_FACES_DIR, filename)
+                    if os.path.isfile(p):
+                        try: os.remove(p)
+                        except Exception: pass
+                        
+            # 5. Delete face encodings cache
+            if os.path.exists(ENCODINGS_CACHE_FILE):
+                try: os.remove(ENCODINGS_CACHE_FILE)
+                except Exception: pass
+                
+            # 6. Reload and refresh
+            self.inputs["ID"].delete(0, tk.END)
+            self.inputs["Name"].delete(0, tk.END)
+            self.load_preview()
+            
+            threading.Thread(target=load_known_faces, daemon=True).start()
+            messagebox.showinfo("Success", "Database has been reset successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to reset database: {e}")
 
 # ----------- Login -----------
 class LoginWindow(tk.Tk):
