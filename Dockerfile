@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Application code ─────────────────────────────────────────
-COPY server.py .
+COPY server.py favicon.ico ./
 
 # ── Data volume ──────────────────────────────────────────────
 # Ephemeral in Free tier, but persists if using a paid volume mount
