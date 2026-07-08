@@ -520,6 +520,20 @@ class BeautyHandler(BaseHTTPRequestHandler):
             else:
                 self.send_html("<p>Database not found.</p>", 404)
 
+        elif path == "/favicon.ico":
+            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "favicon.ico")
+            if os.path.exists(icon_path):
+                self.send_response(200)
+                self.send_header("Content-Type", "image/x-icon")
+                with open(icon_path, "rb") as f:
+                    content = f.read()
+                self.send_header("Content-Length", len(content))
+                self.end_headers()
+                self.wfile.write(content)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -751,6 +765,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kaya Kalp Beauty Parlour</title>
     <meta name="description" content="Kaya Kalp Beauty Parlour – Beautician portal for attendance, service logging and rate list.">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -1379,6 +1394,7 @@ ADMIN_LOGIN_HTML = """<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kaya Kalp – Admin Login</title>
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
@@ -1467,6 +1483,7 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kaya Kalp – Admin Panel</title>
     <meta name="description" content="Kaya Kalp Admin Panel – manage beauticians, attendance, and service logs.">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root{

@@ -2192,7 +2192,7 @@ class App(tk.Tk):
         super().__init__()
         self.title("Kaya Kalp Admin Dashboard")
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(script_dir, "Comprimidos_Imagenes_alternativo_25592.ico")
+        icon_path = os.path.join(script_dir, "favicon.ico")
         if os.path.exists(icon_path):
             self.iconbitmap(icon_path)
             
@@ -2603,7 +2603,7 @@ class LoginWindow(tk.Tk):
         super().__init__()
         self.title("Kaya Kalp Login")
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        icon_path = os.path.join(script_dir, "Comprimidos_Imagenes_alternativo_25592.ico")
+        icon_path = os.path.join(script_dir, "favicon.ico")
         if os.path.exists(icon_path):
             self.iconbitmap(icon_path)
         self.geometry("360x220")
