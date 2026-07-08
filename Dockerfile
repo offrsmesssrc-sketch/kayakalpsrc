@@ -2,16 +2,15 @@
 #  Kaya Kalp Beauty Parlour — Dockerfile (Optimized for Free Tier)
 # ─────────────────────────────────────────────────────────────
 
-# Use Python 3.10 slim as base (lightweight and fast)
-FROM python:3.10-slim
+# Use a pre-built face recognition image as base to avoid compilation timeouts on free tier
+FROM datamachines/face_recognition:cpu
 
 # ── Working directory ────────────────────────────────────────
 WORKDIR /app
 
 # ── Python dependencies ──────────────────────────────────────
-# Installing requirements (very fast since heavy libraries are optional)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Installing opencv-python-headless (prebuilt wheel, very fast)
+RUN pip install --no-cache-dir opencv-python-headless
 
 # ── Application code ─────────────────────────────────────────
 COPY server.py favicon.ico ./
