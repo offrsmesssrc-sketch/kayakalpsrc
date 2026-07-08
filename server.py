@@ -551,6 +551,7 @@ class BeautyHandler(BaseHTTPRequestHandler):
 
     # ── POST ─────────────────────────────────────────────
     def do_POST(self):
+        global ADMIN_USERNAME, ADMIN_PASSWORD
         path = urlparse(self.path).path
 
         # ── Public beautician APIs ──
@@ -757,7 +758,6 @@ class BeautyHandler(BaseHTTPRequestHandler):
         # ── Admin: change credentials ──
         elif path == "/admin/change_password":
             if not self.require_admin(): return
-            global ADMIN_USERNAME, ADMIN_PASSWORD
             p = self.read_json()
             new_user = p.get("username", "").strip()
             new_pass = p.get("password", "").strip()
