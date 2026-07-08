@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────────────────────
 
 # Use a pre-built face recognition image as base to avoid compilation timeouts on free tier
-FROM datamachines/face_recognition:cpu
+FROM animcogn/face_recognition:cpu
 
 # ── Working directory ────────────────────────────────────────
 WORKDIR /app
