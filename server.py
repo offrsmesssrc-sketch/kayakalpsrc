@@ -821,6 +821,27 @@ class BeautyHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"success": False, "error": str(e)})
 
+        # ── Admin: upload database (base64 JSON) ──
+        elif path == "/admin/upload_db":
+            if not self.require_admin(): return
+            p = self.read_json()
+            db_b64 = p.get("db_base64", "")
+            if not db_b64:
+                self.send_json({"success": False, "error": "No database data"}); return
+            try:
+                db_data = base64.b64decode(db_b64)
+                if not db_data.startswith(b"SQLite format 3\x00"):
+                    self.send_json({"success": False, "error": "Invalid SQLite database file format"}); return
+                
+                with open(DB_FILE, "wb") as f:
+                    f.write(db_data)
+                
+                init_db()
+                threading.Thread(target=load_known_faces, daemon=True).start()
+                self.send_json({"success": True})
+            except Exception as e:
+                self.send_json({"success": False, "error": str(e)})
+
         # ── Admin: upload face photo (base64 JSON) ──
         elif path == "/admin/upload_photo":
             if not self.require_admin(): return
@@ -1853,11 +1874,15 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
             </div>
         </div>
         <div class="card">
-            <div class="card-title">&#128190; Database Backup</div>
-            <p style="font-size:13px;color:var(--sub);margin-bottom:16px;">Download a full backup of the SQLite database. Keep this file safe — it contains all beautician, attendance, and service data.</p>
-            <a href="/admin/download_db" style="text-decoration:none;">
-                <button class="btn-sm btn-primary">&#8659; Download beautyparlour.db</button>
-            </a>
+            <div class="card-title">&#128190; Database Backup & Restore</div>
+            <p style="font-size:13px;color:var(--sub);margin-bottom:16px;">Download a full backup of the SQLite database to keep your data safe, or upload an existing backup to restore database state.</p>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+                <a href="/admin/download_db" style="text-decoration:none;">
+                    <button class="btn-sm btn-primary">&#8659; Download beautyparlour.db</button>
+                </a>
+                <input type="file" id="db-file" accept=".db" style="display:none;" onchange="uploadDatabase()">
+                <button class="btn-sm btn-ghost" onclick="document.getElementById('db-file').click()">&#8657; Upload & Restore DB</button>
+            </div>
         </div>
         <div class="card" style="border-color:rgba(224,112,112,0.3); background:rgba(224,112,112,0.05);">
             <div class="card-title" style="color:var(--red);">&#9888; Reset / Erase Entire Database</div>
@@ -2251,6 +2276,42 @@ ADMIN_DASHBOARD_HTML = """<!DOCTYPE html>
         } catch (e) {
             showToast('Error resetting database: ' + e, 'error');
         }
+     }
+
+    async function uploadDatabase() {
+        const fileInput = document.getElementById('db-file');
+        if (!fileInput.files.length) return;
+        const file = fileInput.files[0];
+        
+        if (!confirm(`Are you sure you want to restore the database from '${file.name}'?\nThis will overwrite all current cloud data.`)) {
+            fileInput.value = '';
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            const base64 = e.target.result.split(',')[1];
+            try {
+                const res = await fetch('/admin/upload_db', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({db_base64: base64})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Database restored successfully!', 'success');
+                    fileInput.value = '';
+                    loadData();
+                } else {
+                    showToast('Restore failed: ' + data.error, 'error');
+                    fileInput.value = '';
+                }
+            } catch (err) {
+                showToast('Error uploading database: ' + err, 'error');
+                fileInput.value = '';
+            }
+        };
+        reader.readAsDataURL(file);
     }
 
     // ── Table filter ─────────────────────────────────────────
